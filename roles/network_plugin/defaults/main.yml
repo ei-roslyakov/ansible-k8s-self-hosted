@@ -1,0 +1,4 @@
+---
+# defaults file for network-plugin
+network_plugin: "flannel"
+flannel_version: "v0.27.0"

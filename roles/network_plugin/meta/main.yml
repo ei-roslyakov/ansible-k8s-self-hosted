@@ -1,0 +1,12 @@
+galaxy_info:
+  author: Yevhenii Rosliakov
+  description: Install a pod network plugin on a Kubernetes cluster
+  company: N/A
+
+  license: MIT
+
+  min_ansible_version: "2.1"
+
+  galaxy_tags: []
+
+dependencies: []

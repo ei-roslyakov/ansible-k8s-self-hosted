@@ -1,0 +1,70 @@
+---
+# tasks file for join-node
+- name: Upgrade kubeadm on workers
+  become: true
+  ansible.builtin.apt:
+    name:
+      - "kubeadm={{ kube_version }}*"
+      - "kubelet={{ kube_version }}*"
+      - "kubectl={{ kube_version }}*"
+    state: present
+    force: true
+  when:
+    - inventory_hostname in groups['kube_nodes']
+
+# Retrieve join command from the master
+- name: Retrieve join command
+  become: true
+  ansible.builtin.command: kubeadm token create --print-join-command
+  register: join_cmd
+  when:
+    - inventory_hostname in groups['kube_master']
+  changed_when: false
+
+# Save join command on the master node
+- name: Save join command to file
+  become: true
+  ansible.builtin.copy:
+    dest: /tmp/kube_join_cmd.sh
+    content: "#!/bin/bash\n{{ join_cmd.stdout }} --ignore-preflight-errors=all"
+    mode: '0700'
+  when:
+    - inventory_hostname in groups['kube_master']
+
+# Share join command as a fact on master
+- name: Set join command as a fact on master
+  ansible.builtin.set_fact:
+    join_command: "{{ join_cmd.stdout }}"
+  when:
+    - inventory_hostname in groups['kube_master']
+
+# Check if node is already part of the cluster (from the control plane)
+- name: Check if node is already part of the cluster
+  delegate_to: "{{ groups['kube_master'][0] }}"
+  ansible.builtin.command: kubectl get nodes {{ inventory_hostname }} -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}'
+  register: node_status
+  ignore_errors: true
+  changed_when: false
+  when:
+    - inventory_hostname in groups.get('kube_nodes', [])
+
+# Ensure the join command is available on workers
+- name: Distribute join command to worker nodes
+  become: true
+  ansible.builtin.copy:
+    dest: /tmp/kube_join_cmd.sh
+    content: "#!/bin/bash\n{{ hostvars[groups['kube_master'][0]].join_command }} --ignore-preflight-errors=all"
+    mode: '0700'
+  when:
+    - inventory_hostname in groups.get('kube_nodes', [])
+
+# Join worker nodes to the cluster if not already joined
+- name: Join worker nodes to the cluster
+  become: true
+  ansible.builtin.command: /tmp/kube_join_cmd.sh
+  changed_when: true
+  when:
+    - inventory_hostname in groups['kube_nodes']
+    - node_status is defined
+    - node_status.stdout is defined
+    - node_status.stdout != 'True'

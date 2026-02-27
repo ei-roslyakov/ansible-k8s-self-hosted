@@ -1,0 +1,6 @@
+---
+- name: Test join_node role
+  hosts: localhost
+  remote_user: root
+  roles:
+    - join_node

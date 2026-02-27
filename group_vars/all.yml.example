@@ -1,0 +1,6 @@
+kube_version: "1.35.0"
+pod_network_cidr: "10.244.0.0/16"
+service_cidr: "10.96.0.0/12"
+cluster_name: "k8s-cluster"
+network_plugin: "flannel"
+flannel_version: "v0.27.4"

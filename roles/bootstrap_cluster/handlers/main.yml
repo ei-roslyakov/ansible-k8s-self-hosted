@@ -1,0 +1,7 @@
+---
+# handlers file for bootstrap-cluster
+- name: Restart kubelet
+  become: true
+  ansible.builtin.service:
+    name: kubelet
+    state: restarted

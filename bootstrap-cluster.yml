@@ -1,0 +1,7 @@
+- name: Deploy Kubernetes Cluster
+  hosts: kube_master
+  become: true
+  roles:
+    - role: bootstrap_os
+    - role: bootstrap_cluster
+    - role: network_plugin

@@ -1,0 +1,10 @@
+- name: Prepare Nodes
+  hosts: kube_nodes
+  become: true
+  roles:
+    - role: bootstrap_os
+
+- name: Join Kubernetes Node
+  hosts: all
+  roles:
+    - role: join_node

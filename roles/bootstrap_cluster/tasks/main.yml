@@ -1,0 +1,142 @@
+---
+
+# Generate default containerd configuration and update settings for Kubernetes compatibility
+
+
+# Ensure keyrings directory exists
+- name: Ensure keyrings directory exists
+  become: true
+  ansible.builtin.file:
+    path: /etc/apt/keyrings
+    state: directory
+    mode: '0755'
+
+# Add Kubernetes GPG key to keyring
+- name: Add Kubernetes GPG key to keyring
+  become: true
+  ansible.builtin.apt_key:
+    url: >-
+      https://pkgs.k8s.io/core:/stable:/v{{ kube_version.split('.')[:2] | join('.') }}/deb/Release.key
+    keyring: /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+    state: present
+
+# Remove old Kubernetes list
+- name: Remove old Kubernetes list
+  become: true
+  ansible.builtin.file:
+    path: /etc/apt/sources.list.d/kubernetes.list
+    state: absent
+
+# Add Kubernetes apt repository
+- name: Add Kubernetes apt repository
+  become: true
+  ansible.builtin.apt_repository:
+    repo: >-
+      deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg]
+      https://pkgs.k8s.io/core:/stable:/v{{ kube_version.split('.')[:2] | join('.') }}/deb/ /
+    filename: kubernetes
+    state: present
+
+
+# Upgrade kubeadm package to the specified version on control plane nodes
+- name: Upgrade kubeadm on control plane
+  become: true
+  ansible.builtin.apt:
+    name: "kubeadm={{ kube_version }}*"
+    state: present
+    force: true
+    update_cache: true
+  when: inventory_hostname in groups['kube_master']
+
+# Hold kubeadm package to prevent unintended upgrades on control plane nodes
+- name: Hold kubeadm on control plane
+  become: true
+  ansible.builtin.command: apt-mark hold kubeadm
+  changed_when: false
+  when: inventory_hostname in groups['kube_master']
+
+# Upgrade kubelet and kubectl packages to the specified version on control plane nodes
+- name: Upgrade kubelet and kubectl on control plane
+  become: true
+  ansible.builtin.apt:
+    name:
+      - "kubelet={{ kube_version }}*"
+      - "kubectl={{ kube_version }}*"
+    state: present
+    force: true
+  when: inventory_hostname in groups['kube_master']
+
+# Hold kubelet and kubectl packages to prevent unintended upgrades on control plane nodes
+- name: Hold kubelet and kubectl on control plane
+  become: true
+  ansible.builtin.dpkg_selections:
+    name: "{{ item }}"
+    selection: hold
+  loop:
+    - kubelet
+    - kubectl
+  when: inventory_hostname in groups['kube_master']
+  notify: Restart kubelet
+
+# Enable kubelet
+- name: Enable and start kubelet
+  become: true
+  ansible.builtin.service:
+    name: kubelet
+    enabled: true
+    state: started
+
+# Kubernetes master node initialization
+- name: Initialize and configure Kubernetes master
+  notify: Restart kubelet
+  block:
+    - name: Initialize Kubernetes cluster on master
+      become: true
+      ansible.builtin.command: >
+        kubeadm init
+        --apiserver-advertise-address={{ ansible_facts['default_ipv4']['address'] }}
+        --pod-network-cidr={{ pod_network_cidr }}
+        --service-cidr={{ service_cidr }}
+        --kubernetes-version {{ kube_version }}
+        --control-plane-endpoint {{ cluster_name }}
+      args:
+        creates: /etc/kubernetes/admin.conf
+      register: kubeadm_output
+      when: inventory_hostname in groups['kube_master']
+
+    - name: Print kubeadm init output
+      ansible.builtin.debug:
+        var: kubeadm_output.stdout
+      when: inventory_hostname in groups['kube_master']
+
+    - name: Ensure .kube directory exists for the user
+      become: true
+      ansible.builtin.file:
+        path: /home/{{ ansible_user }}/.kube
+        state: directory
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+        mode: '0700'
+      when: inventory_hostname in groups['kube_master']
+
+    - name: Copy admin kubeconfig to user home directory
+      become: true
+      ansible.builtin.copy:
+        src: /etc/kubernetes/admin.conf
+        dest: /home/{{ ansible_user }}/.kube/config
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+        mode: '0644'
+        remote_src: true
+      when: inventory_hostname in groups['kube_master']
+
+    - name: Wait for the Kubernetes API server to be ready
+      ansible.builtin.command: kubectl get nodes
+      register: result
+      retries: 20
+      delay: 10
+      until: result.rc == 0
+      changed_when: false
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+      when: inventory_hostname in groups['kube_master']

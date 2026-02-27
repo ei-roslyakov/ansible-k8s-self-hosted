@@ -1,0 +1,179 @@
+---
+# tasks file for upgrade-cluster
+# 1. Get current cluster (API server) version once
+- name: Get current Kubernetes server version
+  become: true
+  ansible.builtin.shell: |
+    export KUBECONFIG=/etc/kubernetes/admin.conf
+    kubectl version --output=json
+  register: kubectl_version
+  changed_when: false
+  failed_when: false          # don't fail play if not installed / not reachable
+  run_once: true
+  delegate_to: "{{ groups['kube_master'][0] }}"
+
+- name: Print current Kubernetes version
+  ansible.builtin.debug:
+    msg: >-
+      Current Kubernetes version: {{
+        (kubectl_version.stdout | from_json).serverVersion.gitVersion
+        | regex_replace('^v', '')
+        if kubectl_version.stdout is search('"serverVersion"')
+        else 'unknown' }}
+  run_once: true
+  delegate_to: "{{ groups['kube_master'][0] }}"
+
+# (Optional) Extract a clean version string for readability (only if command succeeded)
+- name: Set current_k8s_version fact (only if we got a version)
+  ansible.builtin.set_fact:
+    current_k8s_version: >-
+      {{
+        (kubectl_version.stdout | from_json).serverVersion.gitVersion
+        | regex_replace('^v', '')
+      }}
+  when:
+    - kubectl_version.stdout is search('"serverVersion"')
+  run_once: true
+  delegate_to: "{{ groups['kube_master'][0] }}"
+
+# Unhold kubeadm package to allow its upgrade on control plane nodes
+- name: Unhold kubeadm on control plane
+  become: true
+  ansible.builtin.command: apt-mark unhold kubeadm kubelet kubectl
+  changed_when: true
+  when:
+    - inventory_hostname in groups['kube_master']
+    - kubectl_version.rc == 0
+    - ( (kubectl_version.stdout | from_json).serverVersion.gitVersion
+        | regex_replace('^v', '') ) is version(kube_version, '<')
+
+# Upgrade kubeadm package to the specified version on control plane nodes
+- name: Upgrade kubelet and kubectl on control plane
+  become: true
+  ansible.builtin.apt:
+    name:
+      - "kubeadm={{ kube_version }}*"
+      - "kubelet={{ kube_version }}*"
+      - "kubectl={{ kube_version }}*"
+    state: present
+    update_cache: true
+    force: true
+  when:
+    - inventory_hostname in groups['kube_master']
+    - kubectl_version.rc == 0
+    - ( (kubectl_version.stdout | from_json).serverVersion.gitVersion
+        | regex_replace('^v', '') ) is version(kube_version, '<')
+
+# Run kubeadm upgrade plan to check upgrade possibilities on control plane nodes
+- name: Run kubeadm upgrade plan
+  become: true
+  ansible.builtin.command: kubeadm upgrade plan
+  register: upgrade_plan
+  changed_when: false
+  when:
+    - inventory_hostname in groups['kube_master']
+    - kubectl_version.rc == 0
+    - ( (kubectl_version.stdout | from_json).serverVersion.gitVersion
+        | regex_replace('^v', '') ) is version(kube_version, '<')
+
+# Apply the kubeadm upgrade to the specified version on control plane nodes
+- name: Apply kubeadm upgrade on control plane
+  become: true
+  ansible.builtin.command: >
+    kubeadm upgrade apply -y v{{ kube_version }}
+  changed_when: true
+  when:
+    - inventory_hostname in groups['kube_master']
+    - kubectl_version.rc == 0
+    - ( (kubectl_version.stdout | from_json).serverVersion.gitVersion
+        | regex_replace('^v', '') ) is version(kube_version, '<')
+
+- name: Hold kubelet and kubectl on control plane
+  become: true
+  ansible.builtin.dpkg_selections:
+    name: "{{ item }}"
+    selection: hold
+  loop:
+    - kubeadm
+    - kubelet
+    - kubectl
+  when:
+    - inventory_hostname in groups['kube_master']
+    - kubectl_version.rc == 0
+    - ( (kubectl_version.stdout | from_json).serverVersion.gitVersion
+        | regex_replace('^v', '') ) is version(kube_version, '<')
+
+# Restart kubelet service after upgrade on control plane nodes
+- name: Restart kubelet after upgrade (control plane)
+  become: true
+  ansible.builtin.service:
+    name: kubelet
+    state: restarted
+  when:
+    - inventory_hostname in groups['kube_master']
+    - kubectl_version.rc == 0
+    - ( (kubectl_version.stdout | from_json).serverVersion.gitVersion
+        | regex_replace('^v', '') ) is version(kube_version, '<')
+
+# Unhold kubeadm package to allow its upgrade on worker nodes
+- name: Unhold kubeadm on workers
+  become: true
+  ansible.builtin.command: apt-mark unhold kubeadm kubelet kubectl
+  changed_when: true
+  when:
+    - inventory_hostname in groups['kube_nodes']
+    - kubectl_version.rc == 0
+    - ( (kubectl_version.stdout | from_json).serverVersion.gitVersion
+        | regex_replace('^v', '') ) is version(kube_version, '<')
+
+- name: Upgrade kubeadm on workers
+  become: true
+  ansible.builtin.apt:
+    name:
+      - "kubeadm={{ kube_version }}*"
+      - "kubelet={{ kube_version }}*"
+      - "kubectl={{ kube_version }}*"
+    state: present
+    update_cache: true
+    force: true
+  when:
+    - inventory_hostname in groups['kube_nodes']
+    - kubectl_version.rc == 0
+    - ( (kubectl_version.stdout | from_json).serverVersion.gitVersion
+        | regex_replace('^v', '') ) is version(kube_version, '<')
+
+- name: Run kubeadm upgrade node on workers
+  become: true
+  ansible.builtin.command: kubeadm upgrade node
+  changed_when: true
+  when:
+    - inventory_hostname in groups['kube_nodes']
+    - kubectl_version.rc == 0
+    - ( (kubectl_version.stdout | from_json).serverVersion.gitVersion
+        | regex_replace('^v', '') ) is version(kube_version, '<')
+
+- name: Hold kubeadm on workers
+  become: true
+  ansible.builtin.dpkg_selections:
+    name: "{{ item }}"
+    selection: hold
+  loop:
+    - kubeadm
+    - kubelet
+    - kubectl
+  when:
+    - inventory_hostname in groups['kube_nodes']
+    - kubectl_version.rc == 0
+    - ( (kubectl_version.stdout | from_json).serverVersion.gitVersion
+        | regex_replace('^v', '') ) is version(kube_version, '<')
+
+- name: Restart kubelet on workers
+  become: true
+  ansible.builtin.service:
+    name: kubelet
+    state: restarted
+  when:
+    - inventory_hostname in groups['kube_nodes']
+    - kubectl_version.rc == 0
+    - ( (kubectl_version.stdout | from_json).serverVersion.gitVersion
+        | regex_replace('^v', '') ) is version(kube_version, '<')

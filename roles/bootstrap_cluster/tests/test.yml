@@ -1,0 +1,6 @@
+---
+- name: Test bootstrap_cluster role
+  hosts: localhost
+  remote_user: root
+  roles:
+    - bootstrap_cluster

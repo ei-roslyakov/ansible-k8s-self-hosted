@@ -1,0 +1,10 @@
+---
+# tasks file for network-plugin
+- name: Install pod network plugin
+  ansible.builtin.shell: >
+    kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/{{ flannel_version }}/Documentation/kube-flannel.yml --validate=false
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  when: inventory_hostname in groups['kube_master'] and
+      network_plugin == 'flannel'
+  changed_when: true

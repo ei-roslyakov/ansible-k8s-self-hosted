@@ -1,0 +1,6 @@
+---
+- name: Test upgrade_cluster role
+  hosts: localhost
+  remote_user: root
+  roles:
+    - upgrade_cluster

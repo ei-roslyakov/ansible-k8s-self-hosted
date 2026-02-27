@@ -1,0 +1,12 @@
+[all:vars]
+ansible_user=ubuntu
+ansible_ssh_private_key_file=~/.ssh/id_ed25519
+ansible_python_interpreter=/usr/bin/python3
+
+[kube_master]
+infra-k8s-001-master-001 ansible_host=192.168.1.100
+
+[kube_nodes]
+infra-k8s-001-node-001      ansible_host=192.168.1.110
+infra-k8s-001-node-002      ansible_host=192.168.1.111
+infra-k8s-001-node-003      ansible_host=192.168.1.112

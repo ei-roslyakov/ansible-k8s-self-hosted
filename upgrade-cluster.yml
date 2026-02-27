@@ -1,0 +1,5 @@
+- name: Upgrade Kubernetes Cluster
+  hosts: all
+  roles:
+    - bootstrap_os
+    - upgrade_cluster
