@@ -1,10 +1,44 @@
 ---
 # tasks file for network-plugin
-- name: Install pod network plugin
+- name: Get installed Flannel version
+  ansible.builtin.shell: >
+    kubectl get daemonset kube-flannel-ds -n kube-flannel
+    -o jsonpath='{.spec.template.spec.containers[0].image}'
+    2>/dev/null | grep -oP 'v[\d.]+' || echo "not_installed"
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  register: flannel_installed_version
+  changed_when: false
+  become: true
+  when:
+    - inventory_hostname in groups['kube_master']
+    - network_plugin == 'flannel'
+
+- name: Install or upgrade Flannel pod network plugin
   ansible.builtin.shell: >
     kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/{{ flannel_version }}/Documentation/kube-flannel.yml --validate=false
   environment:
     KUBECONFIG: /etc/kubernetes/admin.conf
-  when: inventory_hostname in groups['kube_master'] and
-      network_plugin == 'flannel'
+  become: true
+  register: flannel_apply
+  when:
+    - inventory_hostname in groups['kube_master']
+    - network_plugin == 'flannel'
+    - >
+      flannel_installed_version.stdout == "not_installed" or
+      flannel_installed_version.stdout is version(flannel_version, '<')
   changed_when: true
+
+- name: Flannel installation status
+  ansible.builtin.debug:
+    msg: >-
+      {% if flannel_apply.skipped is defined and flannel_apply.skipped %}
+      Flannel is already up to date ({{ flannel_installed_version.stdout }})
+      {% elif flannel_installed_version.stdout == "not_installed" %}
+      Flannel was freshly installed ({{ flannel_version }})
+      {% else %}
+      Flannel was upgraded from {{ flannel_installed_version.stdout }} to {{ flannel_version }}
+      {% endif %}
+  when:
+    - inventory_hostname in groups['kube_master']
+    - network_plugin == 'flannel'
