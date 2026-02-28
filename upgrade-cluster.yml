@@ -3,3 +3,4 @@
   roles:
     - bootstrap_os
     - upgrade_cluster
+    - network_plugin

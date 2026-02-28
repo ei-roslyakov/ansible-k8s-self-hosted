@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [v1.0.1] - 2026-02-28
+
+### Changed
+
+- **`network_plugin` role** — Flannel install is now idempotent and version-aware:
+  - Added a pre-flight task that reads the currently installed Flannel version from the `kube-flannel-ds` DaemonSet image tag
+  - `kubectl apply` is skipped when the installed version already matches `flannel_version`; runs when Flannel is not installed or the installed version is older than the target
+  - Added a debug task that reports whether Flannel was freshly installed, upgraded, or already up to date
+
 ## [v1.0.0] - 2026-02-27
 
 ### Added
@@ -46,5 +55,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 - **Requirements**: `community.general` and `ansible.posix` Ansible collections; Python 3 on the control machine
 
-[Unreleased]: https://github.com/yevheniirosliakov/ansible-k8s-self-hosted/compare/v1.0.0...HEAD
-[1.0.0]: https://github.com/yevheniirosliakov/ansible-k8s-self-hosted/releases/tag/v1.0.0
+[Unreleased]: https://github.com/yevheniirosliakov/ansible-k8s-self-hosted/compare/v1.0.1...HEAD
+[v1.0.1]: https://github.com/yevheniirosliakov/ansible-k8s-self-hosted/compare/v1.0.0...v1.0.1
+[v1.0.0]: https://github.com/yevheniirosliakov/ansible-k8s-self-hosted/releases/tag/v1.0.0
