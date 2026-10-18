@@ -1,0 +1,65 @@
+---
+# Cilium: installed once with Helm from the control-plane node.
+# The install is bootstrap-only — after that the cluster's GitOps tooling
+# (e.g. Argo CD) owns Cilium, so an existing install is never upgraded here.
+- name: Check whether Cilium is already installed
+  ansible.builtin.command: kubectl get daemonset cilium -n kube-system -o name
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  register: cilium_installed
+  failed_when: false
+  changed_when: false
+  check_mode: false
+  become: true
+  when: inventory_hostname in groups['kube_master']
+
+- name: Bootstrap Cilium
+  when:
+    - inventory_hostname in groups['kube_master']
+    - cilium_installed.rc != 0
+  become: true
+  block:
+    - name: Get installed Helm version
+      ansible.builtin.shell: >
+        helm version --template '{{ "{{" }} .Version {{ "}}" }}' 2>/dev/null || echo "not_installed"
+      register: helm_installed_version
+      changed_when: false
+
+    - name: Install Helm
+      ansible.builtin.unarchive:
+        src: "https://get.helm.sh/helm-{{ helm_version }}-linux-amd64.tar.gz"
+        dest: /usr/local/bin
+        remote_src: true
+        extra_opts:
+          - --strip-components=1
+          - linux-amd64/helm
+        mode: "0755"
+      when: helm_installed_version.stdout != helm_version
+
+    - name: Write Cilium Helm values
+      ansible.builtin.copy:
+        content: "{{ cilium_values | to_nice_yaml }}"
+        dest: /etc/kubernetes/cilium-values.yaml
+        mode: "0600"
+
+    - name: Install Cilium
+      ansible.builtin.command: >
+        helm install cilium cilium
+        --repo https://helm.cilium.io
+        --version {{ cilium_version }}
+        --namespace kube-system
+        --values /etc/kubernetes/cilium-values.yaml
+        --wait --timeout 10m
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+      changed_when: true
+
+- name: Cilium installation status
+  ansible.builtin.debug:
+    msg: >-
+      {% if cilium_installed.rc == 0 %}
+      Cilium is already installed; skipping (managed outside this role after bootstrap)
+      {% else %}
+      Cilium was freshly installed ({{ cilium_version }})
+      {% endif %}
+  when: inventory_hostname in groups['kube_master']

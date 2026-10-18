@@ -9,7 +9,7 @@ Ansible playbooks and roles for provisioning, extending, and upgrading a self-ma
 | `bootstrap_os` | OS prerequisites — disables swap, sets hostname, configures `/etc/hosts`, loads kernel modules, applies sysctl settings, installs containerd, and installs `kubeadm`/`kubelet`/`kubectl`. |
 | `bootstrap_cluster` | Initialises the control plane with `kubeadm init` and copies the kubeconfig to the admin user's home directory. |
 | `join_node` | Generates a join token on the control plane and runs `kubeadm join` on worker nodes that are not yet members of the cluster. |
-| `network_plugin` | Installs a pod network (CNI) plugin. Currently supports Flannel. |
+| `network_plugin` | Installs a pod network (CNI) plugin: Flannel, or a bootstrap-only Helm install of Cilium. |
 | `upgrade_cluster` | Upgrades `kubeadm`, `kubelet`, and `kubectl` on all nodes and applies `kubeadm upgrade apply` / `kubeadm upgrade node`. |
 
 ## Requirements
@@ -66,8 +66,10 @@ cp group_vars/all.yml.example group_vars/all.yml
 | `pod_network_cidr` | `10.244.0.0/16` | CIDR for the pod network. |
 | `service_cidr` | `10.96.0.0/12` | CIDR for Kubernetes services. |
 | `cluster_name` | `k8s-cluster` | Control-plane endpoint hostname. |
-| `network_plugin` | `flannel` | CNI plugin to deploy. |
+| `network_plugin` | `flannel` | CNI plugin to deploy: `flannel` or `cilium`. |
 | `flannel_version` | `v0.27.4` | Flannel release tag. |
+| `cilium_version` | `1.20.3` | Cilium Helm chart version (bootstrap install only). |
+| `cilium_values` | see role defaults | Helm values for the Cilium bootstrap install. |
 
 > `ansible.cfg` and `inventory.ini` are git-ignored. Use the `.example` files as templates.
 

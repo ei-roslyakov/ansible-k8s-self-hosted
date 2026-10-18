@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Added
+
+- **`network_plugin` role** — Cilium support (`network_plugin: cilium`):
+  - Installs Helm on the control-plane node if missing, then `helm install`s Cilium with `cilium_version` / `cilium_values`
+  - Bootstrap-only: skipped entirely when a `cilium` DaemonSet already exists, so a GitOps tool can own upgrades without the role fighting it
+
+### Changed
+
+- **`network_plugin` role** — tasks split per plugin (`tasks/flannel.yml`, `tasks/cilium.yml`); an unsupported `network_plugin` value now fails the play instead of silently doing nothing
+
 ## [v1.0.1] - 2026-02-28
 
 ### Changed

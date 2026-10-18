@@ -1,4 +1,18 @@
----
 # defaults file for network-plugin
 network_plugin: "flannel"
 flannel_version: "v0.27.0"
+
+cilium_version: "1.20.3"
+helm_version: "v4.3.1"
+# Helm values for the bootstrap install. Keep these identical to whatever
+# manages Cilium afterwards, or the first GitOps sync will reconfigure it.
+cilium_values:
+  ipam:
+    mode: kubernetes
+  kubeProxyReplacement: false
+  routingMode: tunnel
+  tunnelProtocol: vxlan
+  cni:
+    exclusive: true
+  operator:
+    replicas: 1
